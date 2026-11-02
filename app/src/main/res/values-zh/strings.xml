@@ -1712,6 +1712,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_ssh_editor_remote_dir">远程目录</string>
   <string name="workspace_ssh_editor_remote_dir_desc">AI 默认在这里读写文件和执行命令。留空则测试连接后使用远程用户的主目录</string>
   <string name="workspace_ssh_editor_security">安全</string>
+  <string name="workspace_ssh_editor_jump">跳板机</string>
+  <string name="workspace_ssh_editor_jump_desc">通过跳板机转发连接（SSH ProxyJump）。目标机主机密钥仍会单独校验。</string>
+  <string name="workspace_ssh_editor_jump_auth">跳板机认证</string>
+  <string name="workspace_ssh_editor_jump_host_key">跳板机主机密钥</string>
+  <string name="workspace_ssh_editor_jump_host_key_changed_title">跳板机主机密钥已变更</string>
   <string name="workspace_ssh_editor_host_key">主机密钥</string>
   <string name="workspace_ssh_editor_host_key_unconfirmed">尚未确认，测试连接或保存时会请你核对服务器指纹</string>
   <string name="workspace_ssh_editor_connect_failed">连接失败</string>

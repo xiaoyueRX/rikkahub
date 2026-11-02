@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.model.SshJumpSettings
 import me.rerere.rikkahub.data.model.SshWorkspaceDraft
 import me.rerere.rikkahub.data.model.SshWorkspaceSettings
 import me.rerere.rikkahub.utils.JsonInstant
@@ -29,6 +30,7 @@ import me.rerere.workspace.WorkspaceType
 import me.rerere.workspace.ssh.SshAuthType
 import me.rerere.workspace.ssh.SshConnectionConfig
 import me.rerere.workspace.ssh.SshConnectionPool
+import me.rerere.workspace.ssh.SshJumpConfig
 import me.rerere.workspace.ssh.SshProbeResult
 import me.rerere.workspace.ssh.SshShell
 import me.rerere.workspace.ssh.SshWorkspaceBackend
@@ -396,6 +398,18 @@ class WorkspaceRepository(
         passphrase = encryptedPassphrase?.let(::decryptSecret),
         remoteDir = remoteDir,
         hostKey = hostKey,
+        jump = jump?.let {
+            SshJumpConfig(
+                host = it.host,
+                port = it.port,
+                username = it.username,
+                authType = it.authType,
+                password = it.encryptedPassword?.let(::decryptSecret),
+                privateKey = it.encryptedPrivateKey?.let(::decryptSecret),
+                passphrase = it.encryptedPassphrase?.let(::decryptSecret),
+                hostKey = it.hostKey,
+            )
+        },
     )
 
     /**
@@ -432,6 +446,42 @@ class WorkspaceRepository(
                 passphrase.isNotEmpty() -> SecretCipher.encrypt(passphrase)
                 keepPrivateKey -> previous?.encryptedPassphrase
                 else -> null
+            },
+            jump = jump?.let { jumpDraft ->
+                require(jumpDraft.host.isNotBlank()) { "Jump host is required" }
+                require(jumpDraft.username.isNotBlank()) { "Jump username is required" }
+                require(jumpDraft.port in 1..65535) { "Invalid jump port: ${jumpDraft.port}" }
+                val previousJump = previous?.jump
+                // 跳板机端点或认证方式变化后不再沿用旧凭据密文, 必须重新填写
+                val sameJumpEndpoint = previousJump != null && previousJump.host == jumpDraft.host.trim() &&
+                    previousJump.port == jumpDraft.port && previousJump.username == jumpDraft.username.trim() &&
+                    previousJump.authType == jumpDraft.authType
+                val keepJumpPrivateKey = jumpDraft.privateKey.isBlank() && sameJumpEndpoint
+                SshJumpSettings(
+                    host = jumpDraft.host.trim(),
+                    port = jumpDraft.port,
+                    username = jumpDraft.username.trim(),
+                    authType = jumpDraft.authType,
+                    hostKey = jumpDraft.hostKey,
+                    encryptedPassword = if (jumpDraft.authType == SshAuthType.PASSWORD) {
+                        jumpDraft.password.takeIf { it.isNotEmpty() }?.let(SecretCipher::encrypt)
+                            ?: previousJump?.encryptedPassword?.takeIf { sameJumpEndpoint }
+                    } else {
+                        null
+                    },
+                    encryptedPrivateKey = if (jumpDraft.authType == SshAuthType.PRIVATE_KEY) {
+                        jumpDraft.privateKey.takeIf { it.isNotBlank() }?.let { SecretCipher.encrypt(it.trim()) }
+                            ?: previousJump?.encryptedPrivateKey?.takeIf { sameJumpEndpoint }
+                    } else {
+                        null
+                    },
+                    encryptedPassphrase = when {
+                        jumpDraft.authType != SshAuthType.PRIVATE_KEY -> null
+                        jumpDraft.passphrase.isNotEmpty() -> SecretCipher.encrypt(jumpDraft.passphrase)
+                        keepJumpPrivateKey -> previousJump?.encryptedPassphrase?.takeIf { sameJumpEndpoint }
+                        else -> null
+                    },
+                )
             },
         )
     }

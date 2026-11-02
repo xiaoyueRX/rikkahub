@@ -28,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -63,6 +64,7 @@ import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.workspace.ssh.SshAuthType
+import me.rerere.workspace.ssh.SshHostKey
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import java.io.ByteArrayOutputStream
@@ -89,6 +91,14 @@ fun WorkspaceSshEditorPage(id: String?) {
             context.contentResolver.openInputStream(uri)?.use { it.readLimited(MAX_PRIVATE_KEY_BYTES) }
         }.getOrNull()
         if (text != null) vm.update { it.copy(privateKey = text.trim()) }
+    }
+
+    val jumpPrivateKeyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val text = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { it.readLimited(MAX_PRIVATE_KEY_BYTES) }
+        }.getOrNull()
+        if (text != null) vm.update { it.copy(jumpPrivateKey = text.trim()) }
     }
 
     Scaffold(
@@ -166,6 +176,129 @@ fun WorkspaceSshEditorPage(id: String?) {
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                         )
+                    }
+                }
+            }
+
+            item {
+                CardGroup(title = { Text(stringResource(R.string.workspace_ssh_editor_jump)) }) {
+                    item(
+                        leadingContent = { CardGroupIcon(HugeIcons.CloudServer) },
+                        headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_jump)) },
+                        supportingContent = { Text(stringResource(R.string.workspace_ssh_editor_jump_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = state.jumpEnabled,
+                                onCheckedChange = { checked -> vm.update { it.copy(jumpEnabled = checked) } },
+                                enabled = editable,
+                            )
+                        },
+                    )
+                    if (state.jumpEnabled) {
+                        formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_host)) }) {
+                            OutlinedTextField(
+                                enabled = editable,
+                                value = state.jumpHost,
+                                onValueChange = { value -> vm.update { it.copy(jumpHost = value.trim()) } },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text(stringResource(R.string.workspace_ssh_editor_host_placeholder)) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                            )
+                        }
+                        formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_port)) }) {
+                            OutlinedTextField(
+                                enabled = editable,
+                                value = state.jumpPort,
+                                onValueChange = { value ->
+                                    vm.update { it.copy(jumpPort = value.filter(Char::isDigit).take(5)) }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            )
+                        }
+                        formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_username)) }) {
+                            OutlinedTextField(
+                                enabled = editable,
+                                value = state.jumpUsername,
+                                onValueChange = { value -> vm.update { it.copy(jumpUsername = value.trim()) } },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                            )
+                        }
+                        formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_jump_auth)) }) {
+                            val options = listOf(
+                                SshAuthType.PASSWORD to stringResource(R.string.workspace_ssh_editor_password),
+                                SshAuthType.PRIVATE_KEY to stringResource(R.string.workspace_ssh_editor_private_key),
+                            )
+                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                options.forEachIndexed { index, (type, label) ->
+                                    SegmentedButton(
+                                        enabled = editable,
+                                        selected = state.jumpAuthType == type,
+                                        onClick = { vm.update { it.copy(jumpAuthType = type) } },
+                                        shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                                    ) {
+                                        Text(label)
+                                    }
+                                }
+                            }
+                        }
+                        when (state.jumpAuthType) {
+                            SshAuthType.PASSWORD -> formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_password)) }) {
+                                SecretTextField(
+                                    enabled = editable,
+                                    value = state.jumpPassword,
+                                    onValueChange = { value -> vm.update { it.copy(jumpPassword = value) } },
+                                    placeholder = if (state.hasSavedJumpPassword) stringResource(R.string.workspace_ssh_editor_saved_keep) else null,
+                                )
+                            }
+
+                            SshAuthType.PRIVATE_KEY -> {
+                                formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_private_key)) }) {
+                                    OutlinedTextField(
+                                        enabled = editable,
+                                        value = state.jumpPrivateKey,
+                                        onValueChange = { value -> vm.update { it.copy(jumpPrivateKey = value) } },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        placeholder = {
+                                            Text(
+                                                if (state.hasSavedJumpPrivateKey) {
+                                                    stringResource(R.string.workspace_ssh_editor_saved_keep)
+                                                } else {
+                                                    "-----BEGIN OPENSSH PRIVATE KEY-----"
+                                                }
+                                            )
+                                        },
+                                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                        minLines = 3,
+                                        maxLines = 8,
+                                    )
+                                    OutlinedButton(
+                                        enabled = editable,
+                                        onClick = { jumpPrivateKeyPicker.launch(arrayOf("*/*")) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Icon(
+                                            HugeIcons.FileImport,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(ButtonDefaults.IconSize),
+                                        )
+                                        Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                                        Text(stringResource(R.string.workspace_ssh_editor_import_key))
+                                    }
+                                }
+                                formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_passphrase)) }) {
+                                    SecretTextField(
+                                        enabled = editable,
+                                        value = state.jumpPassphrase,
+                                        onValueChange = { value -> vm.update { it.copy(jumpPassphrase = value) } },
+                                        placeholder = stringResource(R.string.workspace_ssh_editor_passphrase_placeholder),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -286,6 +419,23 @@ fun WorkspaceSshEditorPage(id: String?) {
                             }
                         },
                     )
+                    if (state.jumpEnabled) {
+                        item(
+                            leadingContent = { CardGroupIcon(HugeIcons.FingerPrint) },
+                            headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_jump_host_key)) },
+                            supportingContent = {
+                                val hostKey = state.jumpHostKey
+                                if (hostKey == null) {
+                                    Text(stringResource(R.string.workspace_ssh_editor_host_key_unconfirmed))
+                                } else {
+                                    Text(
+                                        text = "${hostKey.type}\n${hostKey.fingerprint}",
+                                        fontFamily = FontFamily.Monospace,
+                                    )
+                                }
+                            },
+                        )
+                    }
                 }
             }
 
@@ -300,10 +450,23 @@ fun WorkspaceSshEditorPage(id: String?) {
 
     state.pendingHostKey?.let { pending ->
         HostKeyDialog(
-            pending = pending,
+            actual = pending.actual,
+            expected = pending.expected,
             address = "${pending.draft.host}:${pending.draft.port}",
+            changedTitle = stringResource(R.string.workspace_ssh_editor_host_key_changed),
             onTrust = vm::trustHostKey,
             onDismiss = vm::dismissHostKey,
+        )
+    }
+
+    state.pendingJumpHostKey?.let { pending ->
+        HostKeyDialog(
+            actual = pending.actual,
+            expected = pending.expected,
+            address = "${pending.draft.jump?.host}:${pending.draft.jump?.port}",
+            changedTitle = stringResource(R.string.workspace_ssh_editor_jump_host_key_changed_title),
+            onTrust = vm::trustJumpHostKey,
+            onDismiss = vm::dismissJumpHostKey,
         )
     }
 
@@ -420,18 +583,20 @@ private fun ProbeSection(
 
 @Composable
 private fun HostKeyDialog(
-    pending: PendingHostKey,
+    actual: SshHostKey,
+    expected: SshHostKey?,
     address: String,
+    changedTitle: String,
     onTrust: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val changed = pending.expected != null
+    val changed = expected != null
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(HugeIcons.Key01, contentDescription = null) },
         title = { Text(
                 if (changed) {
-                    stringResource(R.string.workspace_ssh_editor_host_key_changed)
+                    changedTitle
                 } else {
                     stringResource(R.string.workspace_ssh_editor_host_key_confirm)
                 }
@@ -442,7 +607,7 @@ private fun HostKeyDialog(
                     if (changed) {
                         stringResource(R.string.workspace_ssh_editor_host_key_changed_message, address)
                     } else {
-                        val keyFile = pending.actual.type.removePrefix("ssh-").substringBefore('-')
+                        val keyFile = actual.type.removePrefix("ssh-").substringBefore('-')
                         stringResource(
                             R.string.workspace_ssh_editor_host_key_first_message,
                             address,
@@ -451,7 +616,7 @@ private fun HostKeyDialog(
                     }
                 )
                 Text(
-                    text = "${pending.actual.type}\n${pending.actual.fingerprint}",
+                    text = "${actual.type}\n${actual.fingerprint}",
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier.padding(vertical = 4.dp),

@@ -1710,6 +1710,11 @@
   <string name="workspace_ssh_editor_remote_dir">Remote directory</string>
   <string name="workspace_ssh_editor_remote_dir_desc">The AI reads and writes files and runs commands here by default. Leave empty to use the home directory of the remote user after testing the connection</string>
   <string name="workspace_ssh_editor_security">Security</string>
+  <string name="workspace_ssh_editor_jump">Jump host</string>
+  <string name="workspace_ssh_editor_jump_desc">Route this connection through a bastion server (SSH ProxyJump). The target host key is still verified separately.</string>
+  <string name="workspace_ssh_editor_jump_auth">Jump host authentication</string>
+  <string name="workspace_ssh_editor_jump_host_key">Jump host key</string>
+  <string name="workspace_ssh_editor_jump_host_key_changed_title">Jump host key changed</string>
   <string name="workspace_ssh_editor_host_key">Host key</string>
   <string name="workspace_ssh_editor_host_key_unconfirmed">Not confirmed yet. You will be asked to verify the server fingerprint when testing the connection or saving</string>
   <string name="workspace_ssh_editor_connect_failed">Connection failed</string>
